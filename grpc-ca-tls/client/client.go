@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	pb "github.com/maxlcoder/grpc-example/grpc-tls/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"io/ioutil"
 	"log"
 )
 
@@ -13,11 +16,27 @@ const (
 )
 
 func main()  {
-	cred, err := credentials.NewClientTLSFromFile("../cert/server.pem", "go-grpc")
+	cert, err := tls.LoadX509KeyPair("../cert/client.pem", "../cert/client.key")
 	if err != nil {
 		log.Fatalf("credentials.NewClientTLSFromFile failed: %v", err)
 	}
-	conn, err := grpc.Dial(PORT, grpc.WithTransportCredentials(cred))
+
+	certPool := x509.NewCertPool()
+	ca, err := ioutil.ReadFile("../cert/ca.pem")
+	if err != nil {
+		log.Fatalf("ioutil.ReadFile err: %v", err)
+	}
+	if ok := certPool.AppendCertsFromPEM(ca); !ok {
+		log.Fatalf("certPool.AppendCertsFromPEM err")
+	}
+
+	c := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ServerName: "go-grpc",
+		RootCAs: certPool,
+	})
+
+	conn, err := grpc.Dial(PORT, grpc.WithTransportCredentials(c))
 	if err != nil {
 		log.Fatalf("grpc.Dial err: %v", err)
 	}
@@ -25,7 +44,7 @@ func main()  {
 
 	client := pb.NewSearchServiceClient(conn)
 	resp, err := client.Search(context.Background(), &pb.SearchRequest{
-		Request: "TLS",
+		Request: "Ca TLS",
 	})
 	if err != nil {
 		log.Fatalf("client.Search failed: %v", err)
