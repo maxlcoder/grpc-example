@@ -4,12 +4,15 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	pb "github.com/maxlcoder/grpc-example/grpc-ca-tls/proto"
+	pb "github.com/maxlcoder/grpc-example/grpc-interceptor/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/status"
 	"io/ioutil"
 	"log"
 	"net"
+	"runtime/debug"
 )
 
 const (
@@ -24,6 +27,25 @@ func (s *SearchService) Search(context context.Context, r *pb.SearchRequest) (*p
 	return &pb.SearchResponse{
 		Response: "Search Key: " + r.GetRequest(),
 	}, nil
+}
+
+// logging 拦截器
+func LoggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	log.Printf("gRPC method: %s, %v", info.FullMethod, req)
+	resp, err := handler(ctx, req)
+	log.Printf("gRPC method: %s, %v", info.FullMethod, resp)
+	return resp, err
+}
+
+// recover 拦截器
+func RecoveryInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			debug.PrintStack()
+			err = status.Errorf(codes.Internal, "Panic err: %v", e)
+		}
+	}()
+	return handler(ctx, req)
 }
 
 func main()  {
@@ -47,7 +69,16 @@ func main()  {
 		ClientCAs: certPool,
 	})
 
-	grpcServer := grpc.NewServer(grpc.Creds(c))
+	// opt
+	opts := []grpc.ServerOption{
+		grpc.Creds(c),
+		grpc.ChainUnaryInterceptor(
+			RecoveryInterceptor,
+			LoggingInterceptor,
+		),
+	}
+
+	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterSearchServiceServer(grpcServer, &SearchService{})
 
 	lis, err := net.Listen("tcp", PORT)

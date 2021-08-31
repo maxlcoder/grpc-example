@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	pb "github.com/maxlcoder/grpc-example/grpc-ca-tls/proto"
+	pb "github.com/maxlcoder/grpc-example/grpc-interceptor/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"io/ioutil"
